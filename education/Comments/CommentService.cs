@@ -23,7 +23,7 @@ namespace education.Comments
 
                         int rowsAffected = await cmd.ExecuteNonQueryAsync();
                         return rowsAffected > 0;
-                    }
+                    }   
                 }
             }
             catch (Exception ex)

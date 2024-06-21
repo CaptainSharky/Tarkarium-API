@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Threading.Tasks;
-using education.Tickets;
-using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 namespace education.Tickets
@@ -9,6 +7,7 @@ namespace education.Tickets
     public class TicketService
     {
         private static readonly string connString = "Host=localhost;Username=newuser;Password=password;Database=education";
+
         public async Task<bool> AddTicketToUserAsync(TicketEntity ticket)
         {
             try
@@ -17,12 +16,11 @@ namespace education.Tickets
                 {
                     await conn.OpenAsync();
 
-                    string sql = "INSERT INTO tickets (code, name, description, user_id) VALUES (@Code, @Name, @Description, @UserId)";
+                    string sql = "INSERT INTO tickets (code, ticket_id, user_id) VALUES (@Code, @TicketId, @UserId)";
                     using (NpgsqlCommand cmd = new NpgsqlCommand(sql, conn))
                     {
                         cmd.Parameters.AddWithValue("Code", ticket.Code);
-                        cmd.Parameters.AddWithValue("Name", ticket.Name);
-                        cmd.Parameters.AddWithValue("Description", ticket.Description);
+                        cmd.Parameters.AddWithValue("TicketId", ticket.TicketId);
                         cmd.Parameters.AddWithValue("UserId", ticket.UserId);
 
                         int rowsAffected = await cmd.ExecuteNonQueryAsync();
@@ -36,6 +34,7 @@ namespace education.Tickets
                 return false;
             }
         }
+
         public async Task<TicketEntity> GetTicketAsync(int ticketId)
         {
             try
@@ -44,7 +43,7 @@ namespace education.Tickets
                 {
                     await conn.OpenAsync();
 
-                    string sql = "SELECT id, code, name, description, time, user_id FROM tickets WHERE id = @TicketId";
+                    string sql = "SELECT t.id, t.code, t.time, t.user_id, ti.name, ti.description FROM tickets t INNER JOIN ticket_info ti ON t.ticket_id = ti.ticket_id WHERE t.id = @TicketId";
                     using (NpgsqlCommand cmd = new NpgsqlCommand(sql, conn))
                     {
                         cmd.Parameters.AddWithValue("TicketId", ticketId);
@@ -57,10 +56,10 @@ namespace education.Tickets
                                 {
                                     Id = reader.GetInt32(0),
                                     Code = reader.GetString(1),
-                                    Name = reader.GetString(2),
-                                    Description = reader.GetString(3),
-                                    Time = reader.GetDateTime(4),
-                                    UserId = reader.GetInt32(5)
+                                    Time = reader.GetDateTime(2),
+                                    UserId = reader.GetInt32(3),
+                                    Name = reader.GetString(4),
+                                    Description = reader.GetString(5)
                                 };
                             }
                         }
@@ -74,6 +73,8 @@ namespace education.Tickets
 
             return null;
         }
+
+
         public async Task<TicketDTO> GetTicketInfoAsync(int ticketId)
         {
             try
@@ -82,7 +83,7 @@ namespace education.Tickets
                 {
                     await conn.OpenAsync();
 
-                    string sql = "SELECT code, name, time, description FROM tickets WHERE id = @TicketId";
+                    string sql = "SELECT ti.code, ti.name, t.time, ti.description FROM tickets t INNER JOIN ticket_info ti ON t.ticket_id = ti.ticket_id WHERE t.id = @TicketId";
                     using (NpgsqlCommand cmd = new NpgsqlCommand(sql, conn))
                     {
                         cmd.Parameters.AddWithValue("TicketId", ticketId);
@@ -110,5 +111,63 @@ namespace education.Tickets
 
             return null;
         }
+        public async Task<List<TicketEntity>> GetUserTicketsAsync(string username, string email)
+        {
+            List<TicketEntity> userTickets = new List<TicketEntity>();
+
+            try
+            {
+                using (NpgsqlConnection conn = new NpgsqlConnection(connString))
+                {
+                    await conn.OpenAsync();
+
+                    string userIdQuery = "SELECT id FROM public.users WHERE username = @Username AND email = @Email";
+                    int userId;
+                    using (NpgsqlCommand userIdCmd = new NpgsqlCommand(userIdQuery, conn))
+                    {
+                        userIdCmd.Parameters.AddWithValue("Username", username);
+                        userIdCmd.Parameters.AddWithValue("Email", email);
+                        userId = (int)await userIdCmd.ExecuteScalarAsync();
+                    }
+
+                    
+                    string userTicketsQuery = @"
+                SELECT t.id, t.code, t.ticket_id, t.time, t.user_id, ti.name, ti.description 
+                FROM public.tickets t 
+                INNER JOIN public.ticket_info ti ON t.ticket_id = ti.ticket_id 
+                WHERE t.user_id = @UserId";
+
+                    using (NpgsqlCommand userTicketsCmd = new NpgsqlCommand(userTicketsQuery, conn))
+                    {
+                        userTicketsCmd.Parameters.AddWithValue("UserId", userId);
+
+                        using (NpgsqlDataReader reader = await userTicketsCmd.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                TicketEntity ticket = new TicketEntity
+                                {
+                                    Id = reader.GetInt32(0),
+                                    Code = reader.GetString(1),
+                                    TicketId = reader.GetInt32(2),
+                                    Time = reader.GetDateTime(3),
+                                    UserId = reader.GetInt32(4),
+                                    Name = reader.GetString(5), 
+                                    Description = reader.GetString(6) 
+                                };
+                                userTickets.Add(ticket);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error fetching user tickets: " + ex.Message);
+            }
+
+            return userTickets;
+        }
+
     }
 }

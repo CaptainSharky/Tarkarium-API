@@ -56,5 +56,19 @@ namespace education.Controllers
                 return NotFound("Ticket info not found");
             }
         }
+
+        [HttpGet("user/{username}/{email}")]
+        public async Task<IActionResult> GetUserTicketsAsync(string username, string email)
+        {
+            var userTickets = await _ticketService.GetUserTicketsAsync(username, email);
+            if (userTickets.Count > 0)
+            {
+                return Ok(userTickets);
+            }
+            else
+            {
+                return NotFound("User has no tickets");
+            }
+        }
     }
 }
